@@ -1294,39 +1294,57 @@ beta.r.compute <- function(n, lpmodel, beta.obs.hat, beta.tgt, beta.n,
 
    # Construct the constraints matrix
    A <- rbind(lpmodel$A.obs, lpmodel$A.shp, lpmodel$A.tgt)
-   A.mat1 <- as.matrix(cbind(sqrt(n) * diag(p), zero.pd, -omega.i, A, zero.p1))
+   A.mat11 <- as.matrix(cbind(diag(p), zero.pd, -omega.i, zero.pp, 
+                              A, zero.pd, zero.p1, zero.p1, zero.p1))
+   A.mat12 <- as.matrix(cbind(diag(p), zero.pd, zero.pp, -omega.i,
+                              zero.pd, A, zero.p1, zero.p1, zero.p1))
    if (indicator == 0) {
-      # Multiply A.mat 1 by t(A) if indicator == 0 (i.e. d < p)
-      A.mat1 <- Matrix::t(A) %*% A.mat1
+      # Multiply A.mat1 by t(A) if indicator == 0 (i.e. d < p)
+      A.mat11 <- Matrix::t(A) %*% A.mat11
+      A.mat12 <- Matrix::t(A) %*% A.mat12
    }
-   A.mat2 <- as.matrix(cbind(diag(p), -A, zero.pp, zero.pd, zero.p1))
-   A.mat3 <- as.matrix(cbind(zero.pp, zero.pd, -diag(p), zero.pd, ones.p1))
-   A.mat4 <- as.matrix(cbind(zero.pp, zero.pd, diag(p), zero.pd, ones.p1))
-   A.mat5 <- as.matrix(cbind(iden.beta, zero.pd, zero.pp, zero.pd, zero.p1))
+   
+   A.mat2 <- as.matrix(cbind(diag(p), -A, zero.pp, zero.pp,
+                             zero.pd, zero.pd, zero.p1, zero.p1, zero.p1))
+   A.mat31 <- as.matrix(cbind(zero.pp, zero.pd, -diag(p), zero.pp,
+                              zero.pd, zero.pd, ones.p1, zero.p1, zero.p1))
+   A.mat32 <- as.matrix(cbind(zero.pp, zero.pd, zero.pp, -diag(p),
+                              zero.pd, zero.pd, zero.p1, ones.p1, zero.p1))
+   A.mat41 <- as.matrix(cbind(zero.pp, zero.pd, diag(p), zero.pp,
+                              zero.pd, zero.pd, ones.p1, zero.p1, zero.p1))
+   A.mat42 <- as.matrix(cbind(zero.pp, zero.pd, zero.pp, diag(p),
+                              zero.pd, zero.pd, zero.p1, ones.p1, zero.p1))
+   A.mat5 <- as.matrix(cbind(iden.beta, zero.pd, zero.pp, zero.pp,
+                              zero.pd, zero.pd, zero.p1, zero.p1, zero.p1))
+   A.mat61 <- matrix(c(rep(0,(p+d+p+p+d+d)), -1, 0, 1), nrow=1)
+   A.mat62 <- matrix(c(rep(0,(p+d+p+p+d+d)), 0, -1, 1), nrow=1)
 
    # Construct the rhs vector and the sense vector
-   A.mat <- rbind(A.mat1, A.mat2, A.mat3, A.mat4, A.mat5)
+   A.mat <- rbind(A.mat11, A.mat12, A.mat2, A.mat31, A.mat32,
+                  A.mat41, A.mat42, A.mat5, A.mat61, A.mat62)
    if (indicator == 0) {
       rhs.mat <- Reduce(rbind,
-                        c(sqrt(n) * Matrix::t(A) %*% beta.star, zero.1p,
-                          zero.1p, zero.1p, rep(0, q), lpmodel$beta.shp,
-                          beta.tgt))
+                        c(Matrix::t(A) %*% beta.star, Matrix::t(A) %*% beta.star,
+                          zero.1p, zero.1p, zero.1p, zero.1p, zero.1p, 
+                          rep(0, q), lpmodel$beta.shp, beta.tgt, 0, 0))
       sense.mat <- Reduce(rbind,
-                          c(rep("=", nrow(A.mat1) + nrow(A.mat2)),
-                            rep(">=", 2 * p), rep("=", p)))
+                          c(rep("=", 2 * nrow(A.mat11) + nrow(A.mat2)),
+                            rep(">=", 4 * p), rep("=", p), rep(">=", 2)))
    } else {
       rhs.mat <- Reduce(rbind,
-                        c(sqrt(n) * beta.n, zero.1p, zero.1p, zero.1p,
-                          rep(0, q), lpmodel$beta.shp, beta.tgt))
+                        c(beta.n, beta.n, # mat1
+                          zero.1p, zero.1p, zero.1p, zero.1p, zero.1p, # mat2~4 
+                          rep(0, q), lpmodel$beta.shp, beta.tgt, 0, 0)) # mat5~6
       sense.mat <- Reduce(rbind,
-                          c(rep("=", 2 * p), rep(">=", 2 * p), rep("=", p)))
+                          c(rep("=", 3 * p), rep(">=", 4 * p), 
+                            rep("=", p), rep(">=", 2)))
    }
 
    # Construct the objective function
-   obj <- c(rep(0, 2 * (p + d)), 1)
+   obj <- c(rep(0, 3 * (p + d) + 2), 1)
 
    # Lower bound
-   lb <- c(rep(-Inf, p), rep(0, d), rep(-Inf, p), rep(0, d + 1))
+   lb <- c(rep(-Inf, p), rep(0, d), rep(-Inf, 2 * p), rep(0, 2 * (d + 1)), -Inf)
 
    # Set the arguments
    optim.arg <- list(Af = NULL,
